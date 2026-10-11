@@ -1,0 +1,1991 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>📬 邮件归档看板</title>
+<style>
+  :root{
+    --bg:#eef1f6; --panel:#fff; --panel-2:#f8fafc; --border:#e2e8f0;
+    --text:#0f172a; --muted:#64748b; --accent:#2563eb; --accent-2:#1d4ed8;
+    --soft:#eff6ff; --danger:#dc2626; --ok:#059669;
+    --project-head:#e0e7ff; --project-head-text:#1e3a8a;
+    --topic-head:#f1f5f9;
+    --shadow:0 1px 3px rgba(15,23,42,.08), 0 1px 2px rgba(15,23,42,.04);
+  }
+  body.dark{
+    --bg:#0b1120; --panel:#131c31; --panel-2:#0f172a; --border:#1e293b;
+    --text:#e2e8f0; --muted:#94a3b8; --accent:#3b82f6; --accent-2:#60a5fa;
+    --soft:#172554; --project-head:#1e3a8a; --project-head-text:#dbeafe;
+    --topic-head:#1e293b; --shadow:0 1px 3px rgba(0,0,0,.5);
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  html,body{height:100%;}
+  body{
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+    background:var(--bg); color:var(--text); display:flex; flex-direction:column;
+    overflow:hidden; transition:background .25s, color .25s;
+  }
+
+  header{
+    display:flex; align-items:center; gap:8px; padding:9px 14px;
+    background:var(--panel); border-bottom:1px solid var(--border);
+    flex-wrap:wrap; z-index:10; box-shadow:var(--shadow); flex-shrink:0;
+  }
+  .brand{font-weight:800; font-size:15px; display:flex; align-items:center; gap:6px; white-space:nowrap;}
+  .spacer{flex:1;}
+  .btn{
+    border:1px solid var(--border); background:var(--panel); color:var(--text);
+    padding:6px 11px; border-radius:8px; font-size:12.5px; cursor:pointer;
+    font-family:inherit; transition:.15s; white-space:nowrap; font-weight:500;
+  }
+  .btn:hover{background:var(--panel-2); border-color:var(--muted);}
+  .btn.primary{background:var(--accent); border-color:var(--accent); color:#fff;}
+  .btn.primary:hover{background:var(--accent-2);}
+  .btn.danger{color:var(--danger);}
+  .btn.danger:hover{background:rgba(220,38,38,.08); border-color:var(--danger);}
+  .btn.small{padding:5px 9px; font-size:12px;}
+  .btn:disabled{opacity:.45; cursor:not-allowed;}
+  #folderName{
+    font-size:12px; color:var(--muted); max-width:220px;
+    overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+    padding:0 4px;
+  }
+  #folderName.ok{color:var(--ok); font-weight:600;}
+
+  .drop-strip{
+    background:var(--panel); border-bottom:1px solid var(--border);
+    padding:9px 14px; display:flex; align-items:center; gap:10px;
+    font-size:12.5px; color:var(--muted); flex-shrink:0;
+    transition:.2s;
+  }
+  .drop-strip .icon{font-size:18px;}
+  .drop-strip.dragover{
+    background:var(--soft); color:var(--accent); font-weight:600;
+    border-bottom-color:var(--accent);
+  }
+  body.dragging::after{
+    content:'📥 松手导入邮件';
+    position:fixed; inset:12px; border:3px dashed var(--accent);
+    border-radius:16px; background:rgba(37,99,235,.14);
+    display:flex; align-items:center; justify-content:center;
+    font-size:22px; font-weight:800; color:var(--accent);
+    z-index:800; pointer-events:none; backdrop-filter:blur(2px);
+  }
+
+  .filters{
+    display:flex; align-items:center; gap:8px; padding:8px 14px;
+    background:var(--panel); border-bottom:1px solid var(--border);
+    flex-wrap:wrap; flex-shrink:0; z-index:5;
+  }
+  .filters input{
+    border:1px solid var(--border); background:var(--panel-2);
+    color:var(--text); border-radius:7px; padding:6px 10px; font-size:12.5px;
+    font-family:inherit; outline:none; transition:.15s; min-width:110px;
+  }
+  .filters input:focus{border-color:var(--accent); background:var(--panel);}
+  .filters label{font-size:11.5px; color:var(--muted); font-weight:600;}
+  .filters .stat{font-size:11.5px; color:var(--muted); margin-left:auto;}
+
+  .board{
+    flex:1; display:flex; gap:14px; padding:14px;
+    overflow-x:auto; overflow-y:hidden; align-items:flex-start;
+  }
+  .project-col{
+    flex:0 0 340px; width:340px; max-height:100%;
+    background:var(--panel); border:1px solid var(--border);
+    border-radius:12px; display:flex; flex-direction:column;
+    box-shadow:var(--shadow); overflow:hidden;
+  }
+  .project-head{
+    background:var(--project-head); color:var(--project-head-text);
+    padding:11px 14px; display:flex; align-items:center; gap:8px;
+    font-weight:700; font-size:13.5px;
+  }
+  .project-head .pname{
+    flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+  }
+  .project-head .pcount{
+    font-size:11px; padding:1px 8px; border-radius:10px;
+    background:rgba(255,255,255,.5); color:inherit; font-weight:700;
+  }
+  body.dark .project-head .pcount{background:rgba(0,0,0,.25);}
+  .project-body{
+    flex:1; overflow-y:auto; padding:10px; min-height:80px;
+  }
+  .topic-group{
+    margin-bottom:12px; border-radius:9px; overflow:hidden;
+    border:1px solid var(--border);
+  }
+  .topic-head{
+    background:var(--topic-head); padding:8px 10px;
+    display:flex; align-items:center; gap:6px;
+    font-size:12.5px; font-weight:700; cursor:pointer;
+    user-select:none;
+  }
+  .topic-head .tname{
+    flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+  }
+  .topic-head .tcount{
+    font-size:11px; color:var(--muted); font-weight:600;
+  }
+  .topic-head .arrow{
+    font-size:10px; color:var(--muted); transition:transform .15s;
+  }
+  .topic-group.collapsed .arrow{transform:rotate(-90deg);}
+  .topic-group.collapsed .topic-cards{display:none;}
+  .topic-cards{padding:6px;}
+
+  .mail-card{
+    background:var(--panel); border:1px solid var(--border);
+    border-radius:8px; padding:9px 10px; margin-bottom:5px;
+    cursor:pointer; transition:.15s; position:relative;
+  }
+  .mail-card:last-child{margin-bottom:0;}
+  .mail-card:hover{border-color:var(--accent); transform:translateY(-1px);}
+  .mail-card.unread::before{
+    content:''; position:absolute; left:0; top:8px; bottom:8px; width:3px;
+    background:var(--accent); border-radius:0 3px 3px 0;
+  }
+  .mail-top{
+    display:flex; justify-content:space-between; align-items:center;
+    font-size:11.5px; color:var(--muted); margin-bottom:4px; gap:8px;
+  }
+  .mail-date{font-weight:600;}
+  .mail-from{
+    flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+    text-align:right; color:var(--accent); font-weight:600;
+  }
+  .mail-subject{
+    font-size:13px; font-weight:600; line-height:1.4;
+    margin-bottom:5px; word-break:break-word;
+    display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical;
+    overflow:hidden;
+  }
+  .mail-chips{
+    display:flex; gap:8px; font-size:11px; color:var(--muted);
+    flex-wrap:wrap; align-items:center;
+  }
+  .mail-chip{
+    display:inline-flex; align-items:center; gap:3px;
+  }
+
+  .empty-board{
+    flex:1; display:flex; flex-direction:column;
+    align-items:center; justify-content:center;
+    color:var(--muted); font-size:14px; line-height:2;
+    text-align:center; padding:40px;
+  }
+  .empty-board .big{font-size:48px; opacity:.4; margin-bottom:10px;}
+
+  .overlay{
+    position:fixed; inset:0; background:rgba(15,23,42,.55);
+    display:none; align-items:center; justify-content:center; z-index:100;
+    padding:16px; backdrop-filter:blur(2px);
+  }
+  .overlay.show{display:flex;}
+  .modal{
+    background:var(--panel); border-radius:14px; width:100%;-bottom max-width:620px;
+    max-height::90vh; display:1flex; flex-direction:pxcolumn; overflow:hidden;
+    box solid-shadow:0 25px 60px var rgba(0,0,0,.35);
+  }
+  .modal.wide{max-width:940px;}
+  .modal-head{
+    display:flex; align-items:center; gap:10px; padding:14px 18px;
+    border(--border); flex-shrink:0;
+  }
+  .modal-head h3{
+    font-size:15px; font-weight:700; flex:1;
+    overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+  }
+  .modal-close{
+    border:none; background:transparent; color:var(--muted); font-size:20px;
+    cursor:pointer; padding:0 4px; line-height:1; border-radius:5px;
+  }
+  .modal-close:hover{background:var(--panel-2); color:var(--text);}
+  .modal-body{
+    flex:1; overflow:hidden; display:flex; min-height:340px;
+  }
+  .modal-foot{
+    padding:12px 18px; border-top:1px solid var(--border);
+    display:flex; gap:8px; flex-wrap:wrap; flex-shrink:0;
+  }
+
+  .form-grid{display:grid; gap:12px; padding:16px 18px; overflow-y:auto;}
+  .form-grid .field label{
+    font-size:11.5px; color:var(--muted); font-weight:700;
+    margin-bottom:5px; display:block; letter-spacing:.03em;
+  }
+  .form-grid input{
+    width:100%; border:1px solid var(--border); background:var(--panel-2);
+    color:var(--text); border-radius:8px; padding:9px 11px; font-size:13px;
+    font-family:inherit; outline:none; transition:.15s;
+  }
+  .form-grid input:focus{border-color:var(--accent); background:var(--panel);}
+  .form-grid .row2{display:grid; grid-template-columns:1fr 1fr; gap:12px;}
+  .form-grid .row3{display:grid; grid-template-columns:1fr 1fr 1fr; gap:12px;}
+  .tag-auto, .tag-manual{
+    font-size:10px; padding:1px 6px; border-radius:5px; font-weight:700;
+    margin-left:4px; vertical-align:middle;
+  }
+  .tag-auto{background:rgba(100,116,139,.15); color:var(--muted);}
+  .tag-manual{background:rgba(217,119,6,.15); color:#d97706;}
+  body.dark .tag-manual{color:#fbbf24;}
+  .preview-mini{
+    background:var(--panel-2); border:1px solid var(--border);
+    border-radius:8px; padding:12px 14px; font-size:12.5px;
+    color:var(--muted); max-height:130px; overflow-y:auto;
+    line-height:1.65; white-space:pre-wrap; word-break:break-word;
+  }
+  .att-preview{
+    background:var(--panel-2); border:1px solid var(--border);
+    border-radius:8px; padding:8px 12px; font-size:12px;
+    color:var(--muted); max-height:120px; overflow-y:auto;
+  }
+  .att-preview .att-line{
+    display:flex; align-items:center; gap:8px; padding:3px 0;
+  }
+  .att-preview .att-line .att-name{
+    flex:1; color:var(--text); font-weight:600;
+    overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+  }
+  .att-preview .att-line .att-size{font-size:11px;}
+
+  #previewFrame{flex:1; width:100%; border:none; background:#fff;}
+
+  #toast{
+    position:fixed; bottom:28px; left:50%;
+    transform:translateX(-50%) translateY(20px);
+    background:#0f172a; color:#fff; padding:10px 18px; border-radius:10px;
+    font-size:13px; opacity:0; pointer-events:none; transition:.25s;
+    z-index:999; box-shadow:0 8px 24px rgba(0,0,0,.3);
+    max-width:80vw; text-align:center; line-height:1.5;
+  }
+  #toast.show{opacity:1; transform:translateX(-50%) translateY(0);}
+  body.dark #toast{background:#1e293b; border:1px solid var(--border);}
+
+  #loading{
+    position:fixed; inset:0; background:rgba(15,23,42,.6);
+    display:none; align-items:center; justify-content:center; z-index:500;
+    color:#fff; font-size:14px; gap:12px;
+  }
+  #loading.show{display:flex;}
+  .spinner{
+    width:22px; height:22px; border:2.5px solid rgba(255,255,255,.3);
+    border-top-color:#fff; border-radius:50%; animation:spin .8s linear infinite;
+  }
+  @keyframes spin{to{transform:rotate(360deg);}}
+
+  ::-webkit-scrollbar{width:9px; height:9px;}
+  ::-webkit-scrollbar-thumb{background:rgba(100,116,139,.35); border-radius:5px;}
+  ::-webkit-scrollbar-thumb:hover{background:rgba(100,116,139,.55);}
+  ::-webkit-scrollbar-track{background:transparent;}
+
+  @media (max-width:820px){
+    header{padding:8px 10px; gap:5px;}
+    .brand span{display:none;}
+    #folderName{max-width:110px; font-size:11px;}
+    .btn{padding:5px 8px; font-size:11.5px;}
+    .project-col{flex:0 0 86vw; width:86vw; max-width:340px;}
+    .filters{padding:6px 10px; gap:6px;}
+    .filters input{min-width:90px; padding:5px 8px; font-size:12px;}
+    .form-grid .row2, .form-grid .row3{grid-template-columns:1fr;}
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="brand">📬 <span>邮件归档看板</span></div>
+  <button class="btn primary small" id="pickFolderBtn">📁 选择 OneDrive 文件夹</button>
+  <span id="folderName">未选择文件夹</span>
+  <button class="btn small" id="rebuildBtn" title="扫描文件夹重建索引">🔍 重建索引</button>
+  <div class="spacer"></div>
+  <button class="btn small" id="newProjectBtn" title="手动新建项目列">＋ 项目列</button>
+  <button class="btn small" id="themeBtn" title="切换深色/浅色">🌙</button>
+</header>
+
+<div class="drop-strip" id="dropStrip">
+  <span class="icon">📥</span>
+  <span>把 Outlook 的 <b>.msg</b> 或 <b>.eml</b> 文件拖到这里（支持多封）</span>
+  <button class="btn small" id="browseBtn" style="margin-left:auto;">选择文件</button>
+  <input type="file" id="fileInput" hidden multiple accept=".msg,.eml,.txt">
+</div>
+
+<div class="filters">
+  <label>发件人</label>
+  <input id="qFrom" placeholder="如：张三" autocomplete="off">
+  <label>项目</label>
+  <input id="qProject" placeholder="如：B项目" autocomplete="off">
+  <label>话题</label>
+  <input id="qTopic" placeholder="如：参数变更" autocomplete="off">
+  <input type="date" id="qDateFrom" style="min-width:130px;">
+  <span style="color:var(--muted);font-size:12px;">~</span>
+  <input type="date" id="qDateTo" style="min-width:130px;">
+  <button class="btn small" id="clearFilters">清除</button>
+  <span class="stat" id="stats"></span>
+</div>
+
+<div class="board" id="board"></div>
+
+<div class="overlay" id="tagOverlay">
+  <div class="modal">
+    <div class="modal-head">
+      <span style="font-size:17px;">🏷️</span>
+      <h3>整理邮件标签</h3>
+      <button class="modal-close" id="tagClose">✕</button>
+    </div>
+    <div class="form-grid">
+      <div class="field">
+        <label>主题</label>
+        <input id="tagSubject">
+      </div>
+      <div class="row2">
+        <div class="field">
+          <label>发件人<span class="tag-auto">自动</span></label>
+          <input id="tagFrom">
+        </div>
+        <div class="field">
+          <label>时间<span class="tag-auto">自动</span></label>
+          <input id="tagDate" placeholder="YYYY-MM-DD HH:mm">
+        </div>
+      </div>
+      <div class="row2">
+        <div class="field">
+          <label>项目<span class="tag-manual">手动</span></label>
+          <input id="tagProject" list="projectList" placeholder="如：B项目" autocomplete="off">
+          <datalist id="projectList"></datalist>
+        </div>
+        <div class="field">
+          <label>话题 / 事件<span class="tag-manual">手动</span></label>
+          <input id="tagTopic" list="topicList" placeholder="如：流量参数变更" autocomplete="off">
+          <datalist id="topicList"></datalist>
+        </div>
+      </div>
+      <div class="field">
+        <label>正文预览</label>
+        <div class="preview-mini" id="tagPreview"></div>
+      </div>
+      <div class="field" id="attField" style="display:none;">
+        <label>附件（将保存到 OneDrive）</label>
+        <div class="att-preview" id="attPreview"></div>
+      </div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn danger" id="tagSkip">跳过</button>
+      <div class="spacer"></div>
+      <button class="btn" id="tagCancel">取消全部</button>
+      <button class="btn primary" id="tagSave">保存并归档 →</button>
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="previewOverlay">
+  <div class="modal wide">
+    <div class="modal-head">
+      <span style="font-size:17px;">✉️</span>
+      <h3 id="previewTitle">邮件预览</h3>
+      <button class="btn small" id="previewOpenBtn" title="在新标签页打开">↗</button>
+      <button class="modal-close" id="previewClose">✕</button>
+    </div>
+    <div class="modal-body">
+      <iframe id="previewFrame" sandbox=""></iframe>
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="projectOverlay">
+  <div class="modal" style="max-width:420px;">
+    <div class="modal-head">
+      <h3 id="projModalTitle">新建项目列</h3>
+      <button class="modal-close" id="projClose">✕</button>
+    </div>
+    <div class="form-grid">
+      <div class="field">
+        <label>项目名称</label>
+        <input id="pName" placeholder="如：B项目">
+      </div>
+    </div>
+    <div class="modal-foot">
+      <div class="spacer"></div>
+      <button class="btn" id="projCancel">取消</button>
+      <button class="btn primary" id="projSave">确定</button>
+    </div>
+  </div>
+</div>
+
+<div id="loading"><div class="spinner"></div><span id="loadingText">处理中…</span></div>
+<div id="toast"></div>
+
+<script>
+/* =====================================================================
+   工具函数
+   ===================================================================== */
+const uid = () => Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c =>
+  ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
+const todayISO = () => new Date().toISOString().slice(0, 10);
+
+function fmtSize(b) {
+  if (!b && b !== 0) return '';
+  if (b < 1024) return b + ' B';
+  if (b < 1048576) return (b / 1024).toFixed(1) + ' KB';
+  return (b / 1048576).toFixed(2) + ' MB';
+}
+function toast(msg, ms = 2400) {
+  const el = document.getElementById('toast');
+  el.innerHTML = msg;
+  el.classList.add('show');
+  clearTimeout(el._t);
+  el._t = setTimeout(() => el.classList.remove('show'), ms);
+}
+function showLoading(t) {
+  document.getElementById('loadingText').textContent = t || '处理中…';
+  document.getElementById('loading').classList.add('show');
+}
+function hideLoading() { document.getElementById('loading').classList.remove('show'); }
+
+function parseDateToISO(s) {
+  if (!s) return { display: '', iso: '' };
+  if (s instanceof Date) {
+    if (isNaN(s.getTime())) return { display: '', iso: '' };
+    const pad = n => String(n).padStart(2, '0');
+    const iso = `${s.getFullYear()}-${pad(s.getMonth()+1)}-${pad(s.getDate())}`;
+    return { display: `${iso} ${pad(s.getHours())}:${pad(s.getMinutes())}`, iso };
+  }
+  const d = new Date(s);
+  if (isNaN(d.getTime())) return { display: String(s), iso: '' };
+  return parseDateToISO(d);
+}
+
+function sanitizeFileName(s, maxLen = 60) {
+  let t = String(s || '').replace(/[\\/:*?"<>|\r\n\t]/g, '_').replace(/\s+/g, ' ').trim();
+  t = t.replace(/^[.\s]+|[.\s]+$/g, '');
+  if (!t) t = 'untitled';
+  if (t.length > maxLen) t = t.slice(0, maxLen);
+  return t;
+}
+
+function arrayBufferToBase64(buf) {
+  const bytes = new Uint8Array(buf);
+  let bin = '';
+  const chunk = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunk) {
+    bin += String.fromCharCode.apply(null, bytes.subarray(i, i + chunk));
+  }
+  return btoa(bin);
+}
+
+/* =====================================================================
+   IndexedDB
+   ===================================================================== */
+const DB_NAME = 'mail_kanban_db';
+const DB_VER = 1;
+let db = null;
+
+function openDB() {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(DB_NAME, DB_VER);
+    req.onupgradeneeded = e => {
+      const d = e.target.result;
+      if (!d.objectStoreNames.contains('meta'))  d.createObjectStore('meta');
+      if (!d.objectStoreNames.contains('index')) d.createObjectStore('index', { keyPath: 'id' });
+    };
+    req.onsuccess = e => { db = e.target.result; resolve(); };
+    req.onerror = () => reject(req.error);
+  });
+}
+function idbGet(store, key) {
+  return new Promise((res, rej) => {
+    const r = db.transaction(store, 'readonly').objectStore(store).get(key);
+    r.onsuccess = () => res(r.result);
+    r.onerror = () => rej(r.error);
+  });
+}
+function idbPut(store, val, key) {
+  return new Promise((res, rej) => {
+    const tx = db.transaction(store, 'readwrite');
+    const os = tx.objectStore(store);
+    if (key === undefined) os.put(val); else os.put(val, key);
+    tx.oncomplete = () => res();
+    tx.onerror = () => rej(tx.error);
+  });
+}
+function idbDel(store, key) {
+  return new Promise((res, rej) => {
+    const tx = db.transaction(store, 'readwrite');
+    tx.objectStore(store).delete(key);
+    tx.oncomplete = () => res();
+    tx.onerror = () => rej(tx.error);
+  });
+}
+function idbAll(store) {
+  return new Promise((res, rej) => {
+    const r = db.transaction(store, 'readonly').objectStore(store).getAll();
+    r.onsuccess = () => res(r.result || []);
+    r.onerror = () => rej(r.error);
+  });
+}
+function idbClear(store) {
+  return new Promise((res, rej) => {
+    const tx = db.transaction(store, 'readwrite');
+    tx.objectStore(store).clear();
+    tx.oncomplete = () => res();
+    tx.onerror = () => rej(tx.error);
+  });
+}
+
+/* =====================================================================
+   应用状态
+   ===================================================================== */
+let dirHandle = null;
+let records = [];
+let pendingQueue = [];
+let currentEditing = null;
+let collapsedTopics = new Set();
+let manualProjects = [];
+
+const FS_SUPPORTED = typeof window.showDirectoryPicker === 'function';
+
+/* =====================================================================
+   主题
+   ===================================================================== */
+const THEME_KEY = 'mail_kanban_theme';
+const themeBtn = document.getElementById('themeBtn');
+function applyTheme(t) {
+  const dark = t === 'dark';
+  document.body.classList.toggle('dark', dark);
+  themeBtn.textContent = dark ? '☀️' : '🌙';
+}
+applyTheme(localStorage.getItem(THEME_KEY)
+  || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'));
+themeBtn.onclick = () => {
+  const t = document.body.classList.contains('dark') ? 'light' : 'dark';
+  applyTheme(t);
+  localStorage.setItem(THEME_KEY, t);
+};
+
+/* =====================================================================
+   CFB 解析器（用于 .msg）
+   ===================================================================== */
+const FREESECT   = 0xFFFFFFFF;
+const ENDOFCHAIN = 0xFFFFFFFE;
+const FATSECT    = 0xFFFFFFFD;
+const DIFSECT    = 0xFFFFFFFC;
+
+class CFB {
+  constructor(buffer) {
+    this.buf = buffer instanceof ArrayBuffer ? buffer : buffer.buffer;
+    this.dv = new DataView(this.buf);
+    const sig = new Uint8Array(this.buf, 0, 8);
+    const expected = [0xD0, 0xCF, 0x11, 0xE0, 0xA1, 0xB1, 0x1A, 0xE1];
+    for (let i = 0; i < 8; i++) {
+      if (sig[i] !== expected[i]) throw new Error('不是有效的 Outlook .msg 文件');
+    }
+    this.sectorShift     = this.dv.getUint16(30, true);
+    this.miniSectorShift = this.dv.getUint16(32, true);
+    this.sectorSize      = 1 << this.sectorShift;
+    this.miniSectorSize  = 1 << this.miniSectorShift;
+    this.firstDirSector  = this.dv.getUint32(48, true);
+    this.miniStreamCutoff = this.dv.getUint32(56, true);
+    this.firstMiniFatSector = this.dv.getUint32(60, true);
+    this.firstDifatSector = this.dv.getUint32(68, true);
+    this._readFAT();
+    this._readMiniFAT();
+    this._readDirectory();
+  }
+  _sectorOffset(sid) { return 512 + sid * this.sectorSize; }
+
+  _readFAT() {
+    const fatSectors = [];
+    for (let i = 0; i < 109; i++) {
+      const sid = this.dv.getUint32(76 + i * 4, true);
+      if (sid === FREESECT || sid === ENDOFCHAIN) break;
+      fatSectors.push(sid);
+    }
+    let difatSid = this.firstDifatSector;
+    let guard = 0;
+    while (difatSid !== ENDOFCHAIN && difatSid !== FREESECT && guard++ < 1000) {
+      const off = this._sectorOffset(difatSid);
+      if (off + this.sectorSize > this.buf.byteLength) break;
+      const per = this.s propsectorSize / 4 - 1;
+      for.find (let i = 0(x; i < per; i++) {
+        const sid => = this.dv.getU xint32(off + i * 4.id, true);
+        if (sid === FREESECT || sid === ENDOFCHAIN) break;
+        fatSectors.push(sid);
+      }
+      difatSid = this.dv.getUint32(off + per * 4, true);
+    }
+    const total = fatSectors.length * (this.sectorSize / 4);
+    this.fat = new Uint32Array(total);
+    for (let i = 0; i < fatSectors.length; i++) {
+      const off = this._sectorOffset(fatSectors[i]);
+      const cnt = this.sectorSize / 4;
+      for (let j = 0; j < cnt; j++) {
+        this.fat[i * cnt + j] = this.dv.getUint32(off + j * 4, true);
+      }
+    }
+  }
+  _readMiniFAT() {
+    const arr = [];
+    let sid = this.firstMiniFatSector;
+    let guard = 0;
+    while (sid !== ENDOFCHAIN && sid !== FREESECT && guard++ < 10000) {
+      const off = this._sectorOffset(sid);
+      if (off + this.sectorSize > this.buf.byteLength) break;
+      const cnt = this.sectorSize / 4;
+      for (let i = 0; i < cnt; i++) {
+        arr.push(this.dv.getUint32(off + i * 4, true));
+      }
+      if (sid >= this.fat.length) break;
+      sid = this.fat[sid];
+    }
+    this.miniFat = new Uint32Array(arr);
+  }
+  _readFatChain(startSid, expectedSize) {
+    const chain = [];
+    let sid = startSid;
+    let guard = 0;
+    while (sid !== ENDOFCHAIN && sid !== FREESECT && sid !== FATSECT && sid !== DIFSECT && guard++ < 1e6) {
+      chain.push(sid);
+      if (sid >= this.fat.length) break;
+      sid = this.fat[sid];
+    }
+    const total = chain.length * this.sectorSize;
+    const out = new Uint8Array(total);
+    let p = 0;
+    for (const s of chain) {
+      const off = this._sectorOffset(s);
+      if (off + this.sectorSize > this.buf.byteLength) break;
+      out.set(new Uint8Array(this.buf, off, this.sectorSize), p);
+      p += this.sectorSize;
+    }
+    return out.slice(0, expectedSize !== undefined ? expectedSize : total);
+  }
+  _readMiniChain(startSid, expectedSize) {
+    const chain = [];
+    let sid = startSid;
+    let guard = 0;
+    while (sid !== ENDOFCHAIN && sid !== FREESECT && guard++ < 1e6) {
+      chain.push(sid);
+      if (sid >= this.miniFat.length) break;
+      sid = this.miniFat[sid];
+    }
+    const total = chain.length * this.miniSectorSize;
+    const out = new Uint8Array(total);
+    let p = 0;
+    for (const s of chain) {
+      const off = s * this.miniSectorSize;
+      if (off + this.miniSectorSize > this.miniStream.length) break;
+      out.set(this.miniStream.subarray(off, off + this.miniSectorSize), p);
+      p += this.miniSectorSize;
+    }
+    return out.slice(0, expectedSize !== undefined ? expectedSize : total);
+  }
+  _readDirectory() {
+    const dirBytes = this._readFatChain(this.firstDirSector);
+    this.entries = [];
+    const count = Math.floor(dirBytes.length / 128);
+    const base = dirBytes.byteOffset;
+
+    for (let i = 0; i < count; i++) {
+      const off = base + i * 128;
+      const nameLen = this.dv.getUint32(off + 64, true);
+      let name = '';
+      if (nameLen > 2 && nameLen <= 64) {
+        const nb = new Uint8Array(this.buf, off, nameLen - 2);
+        try { name = new TextDecoder('utf-16le').decode(nb); } catch (e) { name = ''; }
+      }
+      this.entries.push({
+        name,
+        objType: dirBytes[off - base + 66],
+        left:  this.dv.getInt32(off + 68, true),
+        right: this.dv.getInt32(off + 72, true),
+        child: this.dv.getInt32(off + 76, true),
+        startSector: this.dv.getUint32(off + 116, true),
+        streamSize: Number(this.dv.getBigUint64(off + 120, true)),
+        index: i,
+        _childIdx: []
+      });
+    }
+    this.root = this.entries[0];
+    if (this.root && this.root.streamSize > 0 && this.root.startSector !== ENDOFCHAIN && this.root.startSector !== FREESECT) {
+      this.miniStream = this._readFatChain(this.root.startSector, this.root.streamSize);
+    } else {
+      this.miniStream = new Uint8Array(0);
+    }
+    const walk = (idx, parentIdx) => {
+      if (idx < 0 || idx >= this.entries.length) return;
+      const e = this.entries[idx];
+      if (e._visited) return;
+      e._visited = true;
+      e.parent = parentIdx;
+      if (parentIdx >= 0 && parentIdx < this.entries.length) {
+        this.entries[parentIdx]._childIdx.push(idx);
+      }
+      walk(e.left, parentIdx);
+      walk(e.right, parentIdx);
+      walk(e.child, idx);
+    };
+    if (this.entries.length > 0) walk(this.root.child, 0);
+  }
+  getStream(entry) {
+    if (!entry) return null;
+    if (!entry.streamSize) return new Uint8Array(0);
+    if (entry.streamSize < this.miniStreamCutoff && entry.index !== 0) {
+      return this._readMiniChain(entry.startSector, entry.streamSize);
+    }
+    return this._readFatChain(entry.startSector, entry.streamSize);
+  }
+  findEntry(name) { return this.entries.find(e => e.name === name); }
+  getStreamByName(name) {
+    const e = this.findEntry(name);
+    return e ? this.getStream(e) : null;
+  }
+  getChildren(entry) {
+    if (!entry || !entry._childIdx) return [];
+    return entry._childIdx.map(i => this.entries[i]);
+  }
+}
+
+/* =====================================================================
+   MSG 解析
+   ===================================================================== */
+function parsePropsStream(stream) {
+  if (!stream || stream.byteLength < 32) return [];
+  const dv = new DataView(stream.buffer, stream.byteOffset, stream.byteLength);
+  const props = [];
+  let off = 32;
+  while (off + 16 <= stream.byteLength) {
+    const tag = dv.getUint32(off, true);
+    if (tag === 0) { off += 16; continue; }
+    const type = (tag >>> 16) & 0xFFFF;
+    const id   = tag & 0xFFFF;
+    const valBytes = stream.subarray(off + 8, off + 16);
+    const valDv = new DataView(valBytes.buffer, valBytes.byteOffset, 8);
+    let value = null;
+    let streamName = null;
+
+    if (type === 0x001F || type === 0x001E) {
+      const len = valDv.getUint32(0, true);
+      if (len > 8 || len === 0) {
+        const idHex = id.toString(16).padStart(4, '0').toUpperCase();
+        const typeHex = type.toString(16).padStart(4, '0').toUpperCase();
+        streamName = '__substg1.0_' + idHex + typeHex;
+      } else {
+        if (type === 0x001F) {
+          value = new TextDecoder('utf-16le').decode(valBytes.subarray(0, len)).replace(/\0+$/g, '');
+        } else {
+          try { value = new TextDecoder('gbk').decode(valBytes.subarray(0, len)).replace(/\0+$/g, ''); }
+          catch (e) { value = new TextDecoder('windows-1252').decode(valBytes.subarray(0, len)); }
+        }
+      }
+    } else if (type === 0x0040) {
+      const lo = valDv.getUint32(0, true);
+      const hi = valDv.getUint32(4, true);
+      const ft = hi * 4294967296 + lo;
+      if (ft > 0) {
+        const ms = (ft - 116444736000000000) / 10000;
+        if (ms > 0 && ms < 4e12) value = new Date(ms);
+      }
+    } else if (type === 0x0003) value = valDv.getUint32(0, true);
+    else if (type === 0x0002) value = valDv.getInt16(0, true);
+    else if (type === 0x000B) value = valDv.getUint16(0, true) !== 0;
+    else if (type === 0x0102) {
+      const len = valDv.getUint32(0, true);
+      if (len > 8) {
+        const idHex = id.toString(16).padStart(4, '0').toUpperCase();
+        const typeHex = type.toString(16).padStart(4, '0').toUpperCase();
+        streamName = '__substg1.0_' + idHex + typeHex;
+      } else if (len > 0) {
+        value = valBytes.subarray(0, len);
+      }
+    }
+    props.push({ id, type, value, streamName, raw: valBytes });
+    off += 16;
+  }
+  return props;
+}
+
+function getPropString(cfb, props, id) {
+  const p = === id);
+  if (!p) return '';
+  if (typeof p.value === 'string') return p.value;
+  if (p.streamName) {
+    const s = cfb.getStreamByName(p.streamName);
+    if (s && s.length) {
+      if (p.type === 0x001F) {
+        return new TextDecoder('utf-16le').decode(s).replace(/\0+$/g, '').replace(/^\uFEFF/, '');
+      } else if (p.type === 0x001E) {
+        try { return new TextDecoder('gbk').decode(s).replace(/\0+$/g, ''); }
+        catch (e) { return new TextDecoder('windows-1252').decode(s).replace(/\0+$/g, ''); }
+      }
+    }
+  }
+  return '';
+}
+function getPropValue(props, id) {
+  const p = props.find(x => x.id === id);
+  return p ? p.value : undefined;
+}
+function decodeHtmlBytes(bytes) {
+  if (!bytes || !bytes.length) return '';
+  if (bytes.length >= 2 && bytes[0] === 0xFF && bytes[1] === 0xFE) {
+    return new TextDecoder('utf-16le').decode(bytes.subarray(2)).replace(/\0+$/g, '');
+  }
+  let zeros = 0;
+  const lim = Math.min(bytes.length, 400);
+  for (let i = 1; i < lim; i += 2) if (bytes[i] === 0) zeros++;
+  if (zeros > lim / 8) {
+    return new TextDecoder('utf-16le').decode(bytes).replace(/\0+$/g, '');
+  }
+  try {
+    return new TextDecoder('utf-8', { fatal: true }).decode(bytes).replace(/\0+$/g, '');
+  } catch (e) {
+    try { return new TextDecoder('gbk').decode(bytes).replace(/\0+$/g, ''); }
+    catch (e2) { return new TextDecoder('windows-1252').decode(bytes).replace(/\0+$/g, ''); }
+  }
+}
+
+function parseMsgFile(buffer) {
+  const cfb = new CFB(buffer);
+  const propsEntry = cfb.findEntry('__properties_version1.0');
+  if (!propsEntry) throw new Error('MSG 文件缺少属性流');
+  const props = parsePropsStream(cfb.getStream(propsEntry));
+
+  const subject = getPropString(cfb, props, 0x0037) || getPropString(cfb, props, 0x0E1D) || '(无主题)';
+  const fromName  = getPropString(cfb, props, 0x0C1A);
+  const fromEmail = getPropString(cfb, props, 0x0C1F) || getPropString(cfb, props, 0x5D01);
+  const to = getPropString(cfb, props, 0x0E04);
+  const cc = getPropString(cfb, props, 0x0E03);
+
+  const submitTime   = getPropValue(props, 0x0039);
+  const deliveryTime = getPropValue(props, 0x0E06);
+  const dateObj = (submitTime instanceof Date) ? submitTime
+                : (deliveryTime instanceof Date) ? deliveryTime : null;
+
+  let bodyText = getPropString(cfb, props, 0x1000);
+  let bodyHtml = '';
+  const htmlProp = props.find(x => x.id === 0x1013);
+  if (htmlProp) {
+    let raw = null;
+    if (htmlProp.streamName) raw = cfb.getStreamByName(htmlProp.streamName);
+    else if (htmlProp.raw && htmlProp.raw.length > 8) raw = htmlProp.raw;
+    if (raw && raw.length) bodyHtml = decodeHtmlBytes(raw);
+  }
+
+  const attachments = [];
+  const rootChildren = cfb.getChildren(cfb.root);
+  for (const e of rootChildren) {
+    if (e.name && e.name.startsWith('__attach_version1.0_')) {
+      try {
+        const attPropsEntry = cfb.getChildren(e).find(x => x.name === '__properties_version1.0');
+        if (!attPropsEntry) continue;
+        const aprops = parsePropsStream(cfb.getStream(attPropsEntry));
+        const fileName = getPropString(cfb, aprops, 0x3707) || getPropString(cfb, aprops, 0x3704);
+        const mimeTag  = getPropString(cfb, aprops, 0x370E);
+        const dataProp = aprops.find(x => x.id === 0x3701);
+        let attData = null;
+        if (dataProp) {
+          if (dataProp.streamName) attData = cfb.getStreamByName(dataProp.streamName);
+          else if (dataProp.raw) attData = dataProp.raw;
+        }
+        if (fileName && attData && attData.length) {
+          attachments.push({
+            name: fileName,
+            type: mimeTag || 'application/octet-stream',
+            size: attData.length,
+            data: attData.slice().buffer
+          });
+        }
+      } catch (err) {}
+    }
+  }
+  return {
+    subject,
+    from: fromName && fromEmail ? `${fromName} <${fromEmail}>` : (fromName || fromEmail || ''),
+    fromName: fromName || fromEmail || '',
+    fromEmail: fromEmail || '',
+    to, cc,
+    date: dateObj,
+    bodyText, bodyHtml,
+    attachments
+  };
+}
+
+/* =====================================================================
+   EML 解析
+   ===================================================================== */
+function b64ToBytes(b64) {
+  const clean = String(b64).replace(/[^A-Za-z0-9+/=]/g, '');
+  try {
+    const bin = atob(clean);
+    const arr = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+    return arr;
+  } catch (e) { return new Uint8Array(0); }
+}
+function qpToBytes(str) {
+  const s = String(str).replace(/=\r?\n/g, '');
+  const out = [];
+  for (let i = 0; i < s.length; i++) {
+    if (s[i] === '=' && i + 2 < s.length && /^[0-9A-Fa-f]{2}$/.test(s.substr(i + 1, 2))) {
+      out.push(parseInt(s.substr(i + 1, 2), 16));
+      i += 2;
+    } else {
+      out.push(s.charCodeAt(i) & 0xff);
+    }
+  }
+  return new Uint8Array(out);
+}
+function decodeMimeHeader(v) {
+  if (!v) return '';
+  return String(v).replace(/=\?([^?]+)\?([BbQq])\?([^?]*)\?=/g, (m, cs, enc, data) => {
+    try {
+      const bytes = enc.toUpperCase() === 'B'
+        ? b64ToBytes(data)
+        : qpToBytes(data.replace(/_/g, ' '));
+      return new TextDecoder(cs.toLowerCase()).decode(bytes);
+    } catch (e) { return m; }
+  }).replace(/\s+/g, ' ').trim();
+}
+function parseHeaders(block) {
+  const headers = {};
+  let last = null;
+  block.split('\n').forEach(line => {
+    if (/^[ \t]/.test(line) && last) {
+      headers[last] += ' ' + line.trim();
+    } else {
+      const i = line.indexOf(':');
+      if (i > 0) {
+        last = line.slice(0, i).trim().toLowerCase();
+        headers[last] = line.slice(i + 1).trim();
+      }
+    }
+  });
+  return headers;
+}
+function splitHeadersBody(block) {
+  const idx = block.indexOf('\n\n');
+  if (idx < 0) return [parseHeaders(block), ''];
+  return [parseHeaders(block.slice(0, idx)), block.slice(idx + 2)];
+}
+function splitMultipart(body, boundary) {
+  const delim = '--' + boundary;
+  const parts = [];
+  let cur = null;
+  for (const line of body.split('\n')) {
+    const t = line.replace(/[ \t]+$/, '');
+    if (t === delim || t === delim + '--') {
+      if (cur !== null) parts.push(cur.join('\n'));
+      if (t === delim + '--') { cur = null; break; }
+      cur = [];
+    } else if (cur !== null) {
+      cur.push(line);
+    }
+  }
+  if (cur !== null && cur.length) parts.push(cur.join('\n'));
+  return parts.filter(p => p.trim());
+}
+function decodeBodyBytes(body, cte) {
+  const e = (cte || '7bit').toLowerCase();
+  if (e === 'base64') return b64ToBytes(body);
+  if (e === 'quoted-printable') return qpToBytes(body);
+  const arr = new Uint8Array(body.length);
+  for (let i = 0; i < body.length; i++) arr[i] = body.charCodeAt(i) & 0xff;
+  return arr;
+}
+function parseMimePart(headers, body, depth) {
+  if (depth > 8) return { text: '', html: '', attachments: [] };
+  const ct = headers['content-type'] || 'text/plain; charset=utf-8';
+  const ctype = ct.split(';')[0].trim().toLowerCase();
+  const bMatch = ct.match(/boundary\s*=\s*"?([^";]+)"?/i);
+  if (ctype.startsWith('multipart/') && bMatch) {
+    const parts = splitMultipart(body, bMatch[1]);
+    const out = { text: '', html: '', attachments: [] };
+    for (const p of parts) {
+      const [h, b] = splitHeadersBody(p);
+      const r = parseMimePart(h, b, depth + 1);
+      if (!out.text && r.text) out.text = r.text;
+      if (!out.html && r.html) out.html = r.html;
+      out.attachments.push(...r.attachments);
+    }
+    return out;
+  }
+  const cte = (headers['content-transfer-encoding'] || '7bit').toLowerCase();
+  const cm = ct.match(/charset\s*=\s*"?([^";]+)"?/i);
+  const charset = cm ? cm[1] : 'utf-8';
+  const bytes = decodeBodyBytes(body, cte);
+  const cd = headers['content-disposition'] || '';
+  const nameMatch = cd.match(/filename\*?=(?:UTF-8'')?"?([^";\n]+)"?/i)
+                 || ct.match(/name\s*=\s*"?([^";\n]+)"?/i);
+  const isAttachment = /attachment/i.test(cd)
+    || (!ctype.startsWith('text/') && !ctype.startsWith('multipart/') && ctype !== 'message/rfc822');
+  if (isAttachment && bytes.length > 0) {
+    return {
+      text: '', html: '',
+      attachments: [{
+        name: decodeMimeHeader(nameMatch ? nameMatch[1] : '附件'),
+        type: ctype || 'application/octet-stream',
+        size: bytes.length,
+        data: bytes.buffer
+      }]
+    };
+  }
+  let decoded;
+  try { decoded = new TextDecoder(charset).decode(bytes); }
+  catch (e) {
+    try { decoded = new TextDecoder('gbk').decode(bytes); }
+    catch (e2) { decoded = new TextDecoder('utf-8').decode(bytes); }
+  }
+  if (ctype === 'text/html')  return { text: '', html: decoded, attachments: [] };
+  if (ctype === 'text/plain') return { text: decoded, html: '', attachments: [] };
+  return { text: '', html: '', attachments: [] };
+}
+function parseEml(raw) {
+  const text = String(raw).replace(/\r\n/g, '\n');
+  const [headers, body] = splitHeadersBody(text);
+  const r = parseMimePart(headers, body, 0);
+  const dateStr = headers['date'] || '';
+  const d = dateStr ? new Date(dateStr) : null;
+  return {
+    subject: decodeMimeHeader(headers['subject'] || '') || '(无主题)',
+    from: decodeMimeHeader(headers['from'] || ''),
+    fromName: decodeMimeHeader(headers['from'] || ''),
+    fromEmail: decodeMimeHeader(headers['from'] || ''),
+    to: decodeMimeHeader(headers['to'] || ''),
+    cc: decodeMimeHeader(headers['cc'] || ''),
+    date: (d && !isNaN(d.getTime())) ? d : null,
+    bodyText: r.text || '',
+    bodyHtml: r.html || '',
+    attachments: r.attachments || []
+  };
+}
+
+async function parseMailFile(file) {
+  const name = (file.name || '').toLowerCase();
+  const ext = name.split('.').pop();
+  if (ext === 'msg') {
+    const buf = await file.arrayBuffer();
+    const parsed = parseMsgFile(buf);
+    if (!parsed.subject || parsed.subject === '(无主题)') {
+      parsed.subject = file.name.replace(/\.msg$/i, '');
+    }
+    return parsed;
+  }
+  const txt = await file.text();
+  const parsed = parseEml(txt);
+  if (!parsed.subject || parsed.subject === '(无主题)') {
+    parsed.subject = file.name.replace(/\.(eml|txt)$/i, '');
+  }
+  return parsed;
+}
+
+/* =====================================================================
+   文件夹操作
+   ===================================================================== */
+async function pickFolder() {
+  if (!FS_SUPPORTED) {
+    toast('⚠️ 当前浏览器不支持写入文件夹<br>请使用 Chrome / Edge 桌面版', 5000);
+    return null;
+  }
+  try {
+    const h = await window.showDirectoryPicker({ mode: 'readwrite', id: 'mailKanbanDir' });
+    const perm = await h.requestPermission({ mode: 'readwrite' });
+    if (perm !== 'granted') { toast('未授予写入权限'); return null; }
+    dirHandle = h;
+    await idbPut('meta', h, 'dirHandle');
+    updateFolderLabel(h.name, true);
+    toast('✅ 已选择：' + esc(h.name));
+    return h;
+  } catch (e) {
+    if (e.name !== 'AbortError') console.error(e);
+    return null;
+  }
+}
+
+async function restoreFolder() {
+  if (!FS_SUPPORTED) { updateFolderLabel(null); return null; }
+  try {
+    const h = await idbGet('meta', 'dirHandle');
+    if (!h) { updateFolderLabel(null); return null; }
+    const perm = await h.queryPermission({ mode: 'readwrite' });
+    if (perm === 'granted') {
+      dirHandle = h;
+      updateFolderLabel(h.name, true);
+      return h;
+    }
+    updateFolderLabel(h.name + '（需授权）', false);
+    return null;
+  } catch (e) { return null; }
+}
+
+async function ensureFolderPermission() {
+  if (!dirHandle) {
+    const h = await pickFolder();
+    if (!h) throw new Error('未选择保存文件夹');
+    return h;
+  }
+  const perm = await dirHandle.queryPermission({ mode: 'readwrite' });
+  if (perm === 'granted') return dirHandle;
+  const req = await dirHandle.requestPermission({ mode: 'readwrite' });
+  if (req !== 'granted') throw new Error('未授予写入权限');
+  return dirHandle;
+}
+
+function updateFolderLabel(name, ok = true) {
+  const el = document.getElementById('folderName');
+  if (!name) {
+    el.textContent = '未选择文件夹';
+    el.classList.remove('ok');
+  } else {
+    el.textContent = '📁 ' + name;
+    el.classList.toggle('ok', ok);
+  }
+}
+
+async function getOrCreateDir(parent, name) {
+  return await parent.getDirectoryHandle(name, { create: true });
+}
+
+async function writeFileToDir(dir, name, content) {
+  const fh = await dir.getFileHandle(name, { create: true });
+  const w = await fh.createWritable();
+  await w.write(content);
+  await w.close();
+}
+
+async function writeBinaryToDir(dir, name, buffer) {
+  const fh = await dir.getFileHandle(name, { create: true });
+  const w = await fh.createWritable();
+  await w.write(buffer);
+  await w.close();
+}
+
+async function readFileFromDir(dir, name) {
+  try {
+    const fh = await dir.getFileHandle(name);
+    const f = await fh.getFile();
+    return await f.text();
+  } catch (e) { return null; }
+}
+
+async function deleteFileFromDir(dir, name) {
+  try { await dir.removeEntry(name); } catch (e) {}
+}
+
+async function listHtmlFiles() {
+  if (!dirHandle) return [];
+  const out = [];
+  async function walk(dir, prefix) {
+    try {
+      for await (const entry of dir.values()) {
+        if (entry.kind === 'file' && /\.html?$/i.test(entry.name)) {
+          out.push({ entry, path: prefix ? prefix + '/' + entry.name : entry.name });
+        } else if (entry.kind === 'directory') {
+          await walk(entry, prefix ? prefix + '/' + entry.name : entry.name);
+        }
+      }
+    } catch (e) {}
+  }
+  await walk(dirHandle, '');
+  return out;
+}
+
+/* =====================================================================
+   归档 HTML 生成
+   ===================================================================== */
+const MAX_INLINE_ATTACH = 8 * 1024 * 1024;
+
+function buildArchiveHtml(mail) {
+  const meta = {
+    id: mail.id,
+    subject: mail.subject,
+    from: mail.from,
+    fromName: mail.fromName,
+    fromEmail: mail.fromEmail,
+    to: mail.to || '',
+    date: mail.dateDisplay || '',
+    dateISO: mail.dateISO || '',
+    project: mail.project || '',
+    topic: mail.topic || '',
+    archivedAt: new Date().toISOString()
+  };
+
+  let attsHtml = '';
+  if (mail.attachments && mail.attachments.length) {
+    const blocks = [];
+    for (const a of mail.attachments) {
+      const attFileName = a._savedName || a.name;
+      if (a._inline && a.data) {
+        const b64 = arrayBufferToBase64(a.data);
+        const dataUrl = `data:${a.type || 'application/octet-stream'};base64,${b64}`;
+        const isImg = /^image\//i.test(a.type || '');
+        const preview = isImg
+          ? `<img src="${dataUrl}" style="max-width:100%;max-height:320px;border-radius:6px;border:1px solid #e2e8f0;margin-top:8px;" alt="">`
+          : '';
+        blocks.push(`
+          <div class="att-item">
+            <div class="att-head">
+              <span class="att-icon">📎</span>
+              <a class="att-name" href="${dataUrl}" download="${esc(a.name)}">${esc(a.name)}</a>
+              <span class="att-size">${fmtSize(a.size)}</span>
+            </div>
+            ${preview}
+          </div>`);
+      } else {
+        const localPath = mail.folderPath
+          ? `${mail.folderPath}/附件/${attFileName}`
+          : `附件/${attFileName}`;
+        blocks.push(`
+          <div class="att-item">
+            <div class="att-head">
+              <span class="att-icon">📎</span>
+              <span class="att-name">${esc(a.name)}</span>
+              <span class="att-size">${fmtSize(a.size)}</span>
+            </div>
+            <div style="margin-top:4px;font-size:11.5px;color:#64748b;">
+              OneDrive 路径：<code>${esc(localPath)}</code>
+            </div>
+          </div>`);
+      }
+    }
+    attsHtml = `
+      <div class="att-section">
+        <h3>📎 附件（${mail.attachments.length}）</h3>
+        ${blocks.join('')}
+      </div>`;
+  }
+
+  let bodyHtml;
+  if (mail.bodyHtml && mail.bodyHtml.trim()) {
+    bodyHtml = mail.bodyHtml;
+  } else if (mail.bodyText && mail.bodyText.trim()) {
+    bodyHtml = `<pre class="plain">${esc(mail.bodyText)}</pre>`;
+  } else {
+    bodyHtml = '<div class="empty-body">（无正文内容）</div>';
+  }
+
+  return `<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>${esc(mail.subject)}</title>
+<meta name="mail-meta" content="${esc(JSON.stringify(meta))}">
+<style>
+  body{margin:0;background:#f1f5f9;color:#0f172a;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;font-size:14px;line-height:1.65;}
+  .wrap{max-width:900px;margin:0 auto;padding:24px 16px 60px;}
+  .header-box{background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:20px 24px;margin-bottom:16px;box-shadow:0 1px 3px rgba(15,23,42,.06);}
+  .header-box h1{margin:0 0 16px;font-size:19px;line-height:1.4;word-break:break-word;}
+  .meta-table{width:100%;border-collapse:collapse;font-size:13px;}
+  .meta-table td{padding:6px 0;vertical-align:top;}
+  .meta-table td:first-child{width:80px;color:#64748b;font-weight:600;}
+  .tag{padding:2px 9px;border-radius:6px;font-size:12px;font-weight:700;display:inline-block;margin-right:6px;}
+  .tag-project{background:rgba(37,99,235,.12);color:#2563eb;}
+  .tag-topic{background:rgba(217,119,6,.14);color:#d97706;}
+  .body-box{background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:22px 24px;box-shadow:0 1px 3px rgba(15,23,42,.06);word-break:break-word;overflow-x:auto;}
+  .body-box img{max-width:100%;height:auto;}
+  .plain{white-space:pre-wrap;word-break:break-word;margin:0;font-family:inherit;font-size:14px;}
+  .empty-body{color:#94a3b8;font-style:italic;text-align:center;padding:30px 0;}
+  .att-section{background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:18px 24px;margin-top:16px;box-shadow:0 1px 3px rgba(15,23,42,.06);}
+  .att-section h3{margin:0 0 12px;font-size:14px;color:#64748b;font-weight:700;}
+  .att-item{padding:10px 0;border-bottom:1px solid #f1f5f9;}
+  .att-item:last-child{border-bottom:none;padding-bottom:0;}
+  .att-head{display:flex;align-items:center;gap:10px;flex-wrap:wrap;}
+  .att-icon{font-size:18px;}
+  .att-name{color:#2563eb;text-decoration:none;font-weight:600;font-size:13px;word-break:break-all;}
+  .att-name:hover{text-decoration:underline;}
+  .att-size{font-size:11.5px;color:#94a3b8;}
+  code{background:#f1f5f9;padding:1px 6px;border-radius:4px;font-size:11.5px;word-break:break-all;}
+  .foot{text-align:center;color:#94a3b8;font-size:11.5px;margin-top:24px;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="header-box">
+    <h1>${esc(mail.subject)}</h1>
+    <table class="meta-table">
+      <tr><td>发件人</td><td>${esc(mail.from || '—')}</td></tr>
+      ${mail.to ? `<tr><td>收件人</td><td>${esc(mail.to)}</td></tr>` : ''}
+      <tr><td>时间</td><td>${esc(mail.dateDisplay || '—')}</td></tr>
+      <tr><td>项目</td><td>${mail.project ? `<span class="tag tag-project">${esc(mail.project)}</span>` : '—'}</td></tr>
+      <tr><td>话题</td><td>${mail.topic ? `<span class="tag tag-topic">${esc(mail.topic)}</span>` : '—'}</td></tr>
+    </table>
+  </div>
+  <div class="body-box">${bodyHtml}</div>
+  ${attsHtml}
+  <div class="foot">由「邮件归档看板」于 ${new Date().toLocaleString('zh-CN')} 生成</div>
+</div>
+</body>
+</html>`;
+}
+
+/* =====================================================================
+   归档流程
+   ===================================================================== */
+
+/* 生成附件文件名的时间戳：YYYYMMDD_HHMM */
+function formatAttachmentTimestamp(mail) {
+  const d = mail.dateDisplay || '';
+  // 优先匹配 "2026-10-10 21:58" 这种带时间的格式
+  let m = d.match(/^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})/);
+  if (m) return `${m[1]}${m[2]}${m[3]}_${m[4]}${m[5]}`;
+  // 只有日期时，时间补 0000
+  m = d.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (m) return `${m[1]}${m[2]}${m[3]}_0000`;
+  // 回退到 dateISO
+  const iso = mail.dateISO || todayISO();
+  return iso.replace(/-/g, '') + '_0000';
+}
+
+async function archiveMail(mail) {
+  if (!dirHandle) throw new Error('未选择保存文件夹');
+
+  const id = mail.id || uid();
+  mail.id = id;
+
+  const d = parseDateToISO(mail.date);
+  mail.dateDisplay = mail.dateDisplay || d.display || new Date().toLocaleString('zh-CN');
+  mail.dateISO = mail.dateISO || d.iso || todayISO();
+
+  const projectSafe = sanitizeFileName(mail.project || '未分类项目', 30);
+  const topicSafe = sanitizeFileName(mail.topic || '未分类话题', 40);
+
+  // 目录结构：根目录 / 项目 / 话题
+  const projDir = await getOrCreateDir(dirHandle, projectSafe);
+  const topicDir = await getOrCreateDir(projDir, topicSafe);
+  mail.folderPath = `${projectSafe}/${topicSafe}`;
+
+  // 保存附件：命名格式 YYYYMMDD_HHMM_发件人_原文件名
+  if (mail.attachments && mail.attachments.length) {
+    const attDir = await getOrCreateDir(topicDir, '附件');
+    const ts = formatAttachmentTimestamp(mail);
+    const fromPart = sanitizeFileName(mail.fromName || '未知发件人', 20);
+    for (const a of mail.attachments) {
+      if (!a.data) continue;
+      const safeName = sanitizeFileName(a.name, 80);
+      const finalName = `${ts}_${fromPart}_${safeName}`;
+      try {
+        await writeBinaryToDir(attDir, finalName, a.data);
+        a._savedName = finalName;
+        a._inline = a.size <= MAX_INLINE_ATTACH;
+      } catch (e) {
+        console.warn('附件写入失败', a.name, e);
+      }
+    }
+  }
+
+  // 生成 HTML
+  const html = buildArchiveHtml(mail);
+  const datePart = (mail.dateISO || todayISO()).replace(/-/g, '');
+  const fromPart = sanitizeFileName(mail.fromName || 'unknown', 16);
+  const subjectPart = sanitizeFileName(mail.subject || '无主题', 40);
+  const fileName = `${datePart}_${fromPart}_${subjectPart}.html`;
+
+  await writeFileToDir(topicDir, fileName, html);
+
+  const record = {
+    id,
+    fileName,
+    folderPath: mail.folderPath,
+    subject: mail.subject || '',
+    from: mail.from || '',
+    fromName: mail.fromName || '',
+    fromEmail: mail.fromEmail || '',
+    to: mail.to || '',
+    date: mail.dateDisplay,
+    dateISO: mail.dateISO,
+    project: mail.project || '未分类项目',
+    topic: mail.topic || '未分类话题',
+    createdAt: Date.now(),
+    size: new Blob([html]).size,
+    attachmentCount: (mail.attachments || []).length,
+    unread: true
+  };
+
+  await idbPut('index', record);
+  return record;
+}
+
+/* =====================================================================
+   拖拽 & 文件选择
+   ===================================================================== */
+const dropStrip = document.getElementById('dropStrip');
+const fileInput = document.getElementById('fileInput');
+
+let dragCounter = 0;
+window.addEventListener('dragenter', e => {
+  if (!e.dataTransfer || !Array.from(e.dataTransfer.types || []).includes('Files')) return;
+  e.preventDefault();
+  dragCounter++;
+  document.body.classList.add('dragging');
+  dropStrip.classList.add('dragover');
+});
+window.addEventListener('dragover', e => {
+  if (!e.dataTransfer || !Array.from(e.dataTransfer.types || []).includes('Files')) return;
+  e.preventDefault();
+  e.dataTransfer.dropEffect = 'copy';
+});
+window.addEventListener('dragleave', e => {
+  dragCounter = Math.max(0, dragCounter - 1);
+  if (dragCounter === 0) {
+    document.body.classList.remove('dragging');
+    dropStrip.classList.remove('dragover');
+  }
+});
+window.addEventListener('drop', async e => {
+  if (!e.dataTransfer) return;
+  e.preventDefault();
+  dragCounter = 0;
+  document.body.classList.remove('dragging');
+  dropStrip.classList.remove('dragover');
+  const files = Array.from(e.dataTransfer.files || []);
+  if (files.length) await handleIncomingFiles(files);
+});
+
+document.getElementById('browseBtn').onclick = () => fileInput.click();
+fileInput.onchange = async e => {
+  const files = Array.from(e.target.files || []);
+  fileInput.value = '';
+  if (files.length) await handleIncomingFiles(files);
+};
+
+async function handleIncomingFiles(files) {
+  if (!FS_SUPPORTED) {
+    toast('⚠️ 当前浏览器不支持写入文件夹<br>请使用 Chrome / Edge 桌面版', 6000);
+    return;
+  }
+  const valid = files.filter(f => /\.(msg|eml|txt)$/i.test(f.name) || f.type === 'message/rfc822');
+  if (!valid.length) {
+    toast('⚠️ 没有识别到 .msg 或 .eml 文件');
+    return;
+  }
+  try { await ensureFolderPermission(); }
+  catch (e) { toast('⚠️ ' + e.message); return; }
+
+  showLoading(`正在解析 0/${valid.length}…`);
+  pendingQueue = [];
+
+  for (let i = 0; i < valid.length; i++) {
+    const f = valid[i];
+    document.getElementById('loadingText').textContent = `正在解析 ${i + 1}/${valid.length}：${f.name}`;
+    try {
+      const parsed = await parseMailFile(f);
+      parsed._sourceFile = f.name;
+      pendingQueue.push(parsed);
+    } catch (e) {
+      console.error('解析失败：', f.name, e);
+      toast(`⚠️ 解析「${esc(f.name)}」失败：${esc(e.message)}`, 4000);
+    }
+  }
+  hideLoading();
+
+  if (!pendingQueue.length) { toast('没有成功解析出任何邮件'); return; }
+  processNextInQueue();
+}
+
+/* =====================================================================
+   标签编辑
+   ===================================================================== */
+const tagOverlay = document.getElementById('tagOverlay');
+let lastProject = '';
+let lastTopic = '';
+
+function processNextInQueue() {
+  if (!pendingQueue.length) {
+    toast('✅ 全部归档完成');
+    refreshBoard();
+    return;
+  }
+  currentEditing = pendingQueue[0];
+  openTagDialog(currentEditing);
+}
+
+function openTagDialog(mail) {
+  const d = parseDateToISO(mail.date);
+  document.getElementById('tagSubject').value = mail.subject || '';
+  document.getElementById('tagFrom').value = mail.from || '';
+  document.getElementById('tagDate').value = d.display || '';
+  document.getElementById('tagProject').value = lastProject;
+  document.getElementById('tagTopic').value = lastTopic;
+
+  let preview = mail.bodyText || '';
+  if (!preview && mail.bodyHtml) {
+    preview = mail.bodyHtml
+      .replace(/<style[\s\S]*?<\/style>/gi, '')
+      .replace(/<script[\s\S]*?<\/script>/gi, '')
+      .replace(/<[^>]+>/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
+  preview = preview.slice(0, 400);
+  document.getElementById('tagPreview').innerHTML = preview
+    ? esc(preview) + (preview.length >= 400 ? '…' : '')
+    : '<em>（无正文内容）</em>';
+
+  const atts = mail.attachments || [];
+  const attField = document.getElementById('attField');
+  if (atts.length) {
+    attField.style.display = '';
+    const ts = formatAttachmentTimestamp(mail);
+    const fromPart = sanitizeFileName(mail.fromName || '未知发件人', 20);
+    document.getElementById('attPreview').innerHTML = atts.map(a => `
+      <div class="att-line">
+        <span>📎</span>
+        <span class="att-name">${esc(a.name)}</span>
+        <span class="att-size">${fmtSize(a.size)}</span>
+      </div>
+    `).join('') + `<div style="margin-top:6px;font-size:11px;color:var(--muted);">
+      保存为：<code>${esc(lastProject || '项目')}/${esc(lastTopic || '话题')}/附件/${esc(ts)}_${esc(fromPart)}_原文件名</code>
+    </div>`;
+  } else {
+    attField.style.display = 'none';
+  }
+
+  refreshDatalists();
+  tagOverlay.classList.add('show');
+  setTimeout(() => {
+    const el = document.getElementById('tagProject');
+    el.focus();
+    el.select();
+  }, 60);
+}
+
+function refreshDatalists() {
+  const projects = [...new Set([
+    ...records.map(r => r.project).filter(Boolean),
+    ...manualProjects
+  ])];
+  const topics = [...new Set(records.map(r => r.topic).filter(Boolean))];
+  document.getElementById('projectList').innerHTML =
+    projects.map(p => `<option value="${esc(p)}"></option>`).join('');
+  document.getElementById('topicList').innerHTML =
+    topics.map(t => `<option value="${esc(t)}"></option>`).join('');
+}
+
+document.getElementById('tagClose').onclick =
+document.getElementById('tagCancel').onclick = () => {
+  tagOverlay.classList.remove('show');
+  pendingQueue = [];
+  currentEditing = null;
+  refreshBoard();
+};
+
+document.getElementById('tagSkip').onclick = () => {
+  tagOverlay.classList.remove('show');
+  pendingQueue.shift();
+  currentEditing = null;
+  processNextInQueue();
+};
+
+document.getElementById('tagSave').onclick = async () => {
+  if (!currentEditing) return;
+  const mail = currentEditing;
+  mail.subject = document.getElementById('tagSubject').value.trim() || mail.subject || '(无主题)';
+  mail.from    = document.getElementById('tagFrom').value.trim() || mail.from;
+  mail.dateDisplay = document.getElementById('tagDate').value.trim();
+  mail.project = document.getElementById('tagProject').value.trim() || '未分类项目';
+  mail.topic   = document.getElementById('tagTopic').value.trim() || '未分类话题';
+
+  lastProject = mail.project;
+  lastTopic   = mail.topic;
+
+  const d = parseDateToISO(mail.dateDisplay);
+  mail.dateISO = d.iso || todayISO();
+
+  tagOverlay.classList.remove('show');
+  showLoading('正在归档到 OneDrive…');
+  try {
+    await archiveMail(mail);
+    records = await idbAll('index');
+    toast('✅ 已归档：' + esc(mail.subject.slice(0, 40)));
+  } catch (e) {
+    console.error(e);
+    toast('❌ 归档失败：' + esc(e.message), 5000);
+  } finally {
+    hideLoading();
+  }
+  pendingQueue.shift();
+  currentEditing = null;
+  processNextInQueue();
+};
+
+['tagProject', 'tagTopic', 'tagSubject', 'tagDate'].forEach(id => {
+  document.getElementById(id).addEventListener('keydown', e => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      document.getElementById('tagSave').click();
+    }
+  });
+});
+
+/* =====================================================================
+   看板渲染
+   ===================================================================== */
+function getFilters() {
+  return {
+    from:    document.getElementById('qFrom').value.trim().toLowerCase(),
+    project: document.getElementById('qProject').value.trim().toLowerCase(),
+    topic:   document.getElementById('qTopic').value.trim().toLowerCase(),
+    dateFrom: document.getElementById('qDateFrom').value,
+    dateTo:   document.getElementById('qDateTo').value
+  };
+}
+
+function filterRecords(recs, f) {
+  return recs.filter(r => {
+    if (f.from) {
+      const hay = ((r.fromName || '') + ' ' + (r.from || '') + ' ' + (r.fromEmail || '')).toLowerCase();
+      if (!hay.includes(f.from)) return false;
+    }
+    if (f.project && !(r.project || '').toLowerCase().includes(f.project)) return false;
+    if (f.topic && !(r.topic || '').toLowerCase().includes(f.topic)) return false;
+    if (f.dateFrom && (r.dateISO || '') < f.dateFrom) return false;
+    if (f.dateTo && (r.dateISO || '') > f.dateTo) return false;
+    return true;
+  });
+}
+
+function refreshBoard() {
+  const f = getFilters();
+  const list = filterRecords(records, f);
+
+  const board = document.getElementById('board');
+  const stats = document.getElementById('stats');
+
+  if (!records.length) {
+    board.innerHTML = `<div class="empty-board">
+      <span class="big">📭</span>
+      <div>还没有归档的邮件</div>
+      <div style="font-size:12.5px;opacity:.7;">先点击顶部「选择 OneDrive 文件夹」，然后把邮件拖到上方提示条</div>
+    </div>`;
+    stats.textContent = '';
+    return;
+  }
+
+  const byProject = new Map();
+  for (const r of list) {
+    const p = r.project || '未分类项目';
+    if (!byProject.has(p)) byProject.set(p, []);
+    byProject.get(p).push(r);
+  }
+
+  if (!byProject.size) {
+    board.innerHTML = `<div class="empty-board">
+      <span class="big">🔍</span>
+      <div>没有匹配的邮件</div>
+      <div style="font-size:12.5px;opacity:.7;">试试放宽筛选条件</div>
+    </div>`;
+    stats.textContent = '';
+    return;
+  }
+
+  const projects = [...byProject.keys()].sort((a, b) => a.localeCompare(b, 'zh'));
+  board.innerHTML = projects.map(project => {
+    const items = byProject.get(project);
+
+    const byTopic = new Map();
+    for (const r of items) {
+      const t = r.topic || '未分类话题';
+      if (!byTopic.has(t)) byTopic.set(t, []);
+      byTopic.get(t).push(r);
+    }
+
+    const topics = [...byTopic.keys()].sort((a, b) => a.localeCompare(b, 'zh'));
+
+    const topicsHtml = topics.map(topic => {
+      const arr = byTopic.get(topic).sort((a, b) =>
+        (b.dateISO || '').localeCompare(a.dateISO || '')
+        || (b.createdAt || 0) - (a.createdAt || 0)
+      );
+      const key = project + '|' + topic;
+      const collapsed = collapsedTopics.has(key);
+
+      const cardsHtml = arr.map(r => {
+        const attIcon = r.attachmentCount ? `<span class="mail-chip">📎 ${r.attachmentCount}</span>` : '';
+        const unreadCls = r.unread ? ' unread' : '';
+        return `
+          <div class="mail-card${unreadCls}" data-rid="${r.id}">
+            <div class="mail-top">
+              <span class="mail-date">📅 ${esc((r.date || '').slice(5, 10) || (r.dateISO || '').slice(5, 10) || '')}</span>
+              <span class="mail-from" title="${esc(r.from)}">${esc(r.fromName || r.fromEmail || '—')}</span>
+            </div>
+            <div class="mail-subject">${esc(r.subject || '(无主题)')}</div>
+            <div class="mail-chips">
+              ${attIcon}
+            </div>
+          </div>
+        `;
+      }).join('');
+
+      return `
+        <div class="topic-group${collapsed ? ' collapsed' : ''}" data-topic-key="${esc(key)}">
+          <div class="topic-head">
+            <span class="arrow">▼</span>
+            <span class="tname" title="${esc(topic)}">🏷 ${esc(topic)}</span>
+            <span class="tcount">${arr.length}</span>
+          </div>
+          <div class="topic-cards">${cardsHtml}</div>
+        </div>
+      `;
+    }).join('');
+
+    return `
+      <div class="project-col">
+        <div class="project-head">
+          <span>📁</span>
+          <span class="pname">${esc(project)}</span>
+          <span class="pcount">${items.length}</span>
+        </div>
+        <div class="project-body">${topicsHtml}</div>
+      </div>
+    `;
+  }).join('');
+
+  const totalProjects = new Set(records.map(r => r.project).filter(Boolean)).size;
+  const totalTopics = new Set(records.map(r => r.topic).filter(Boolean)).size;
+  stats.textContent = `共 ${records.length} 封邮件 · 显示 ${list.length} · ${totalProjects} 个项目 · ${totalTopics} 个话题`;
+}
+
+/* =====================================================================
+   看板交互
+   ===================================================================== */
+document.getElementById('board').onclick = async e => {
+  const topicHead = e.target.closest('.topic-head');
+  if (topicHead) {
+    const group = topicHead.closest('.topic-group');
+    const key = group.dataset.topicKey;
+    if (collapsedTopics.has(key)) collapsedTopics.delete(key);
+    else collapsedTopics.add(key);
+    group.classList.toggle('collapsed');
+    return;
+  }
+
+  const card = e.target.closest('.mail-card');
+  if (card) {
+    const rid = card.dataset.rid;
+    const rec = records.find(r => r.id === rid);
+    if (rec && rec.unread) {
+      rec.unread = false;
+      await idbPut('index', rec);
+    }
+    openPreview(rec);
+  }
+};
+
+/* =====================================================================
+   邮件预览
+   ===================================================================== */
+let currentPreviewRec = null;
+
+async function openPreview(rec) {
+  if (!rec) return;
+  currentPreviewRec = rec;
+  document.getElementById('previewTitle').textContent = rec.subject || '(无主题)';
+  const frame = document.getElementById('previewFrame');
+
+  try {
+    const parts = (rec.folderPath || '').split('/').filter(Boolean);
+    let dir = dirHandle;
+    for (const p of parts) dir = await dir.getDirectoryHandle(p);
+    const html = await readFileFromDir(dir, rec.fileName);
+    if (html === null) {
+      frame.srcdoc = '<div style="padding:40px;text-align:center;color:#94a3b8;">文件不存在</div>';
+    } else {
+      frame.srcdoc = html;
+    }
+  } catch (e) {
+    frame.srcdoc = '<div style="padding:40px;text-align:center;color:#dc2626;">读取失败：' + esc(e.message) + '</div>';
+  }
+
+  document.getElementById('previewOverlay').classList.add('show');
+}
+
+document.getElementById('previewClose').onclick = () => {
+  document.getElementById('previewOverlay').classList.remove('show');
+  document.getElementById('previewFrame').srcdoc = '';
+  currentPreviewRec = null;
+};
+document.getElementById('previewOverlay').addEventListener('click', e => {
+  if (e.target.id === 'previewOverlay') document.getElementById('previewClose').click();
+});
+document.getElementById('previewOpenBtn').onclick = async () => {
+  if (!currentPreviewRec) return;
+  const rec = currentPreviewRec;
+  try {
+    const parts = (rec.folderPath || '').split('/').filter(Boolean);
+    let dir = dirHandle;
+    for (const p of parts) dir = await dir.getDirectoryHandle(p);
+    const html = await readFileFromDir(dir, rec.fileName);
+    if (html === null) { toast('文件不存在'); return; }
+    const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    window.open(url, '_blank');
+    setTimeout(() => URL.revokeObjectURL(url), 60000);
+  } catch (e) {
+    toast('打开失败：' + esc(e.message));
+  }
+};
+
+/* =====================================================================
+   筛选 & 顶部操作
+   ===================================================================== */
+['qFrom', 'qProject', 'qTopic', 'qDateFrom', 'qDateTo'].forEach(id => {
+  document.getElementById(id).addEventListener('input', refreshBoard);
+});
+document.getElementById('clearFilters').onclick = () => {
+  ['qFrom', 'qProject', 'qTopic', 'qDateFrom', 'qDateTo'].forEach(id => {
+    document.getElementById(id).value = '';
+  });
+  refreshBoard();
+};
+
+document.getElementById('pickFolderBtn').onclick = async () => {
+  await pickFolder();
+  refreshBoard();
+};
+
+document.getElementById('newProjectBtn').onclick = () => {
+  document.getElementById('pName').value = '';
+  document.getElementById('projModalTitle').textContent = '新建项目列';
+  document.getElementById('projectOverlay').classList.add('show');
+  setTimeout(() => document.getElementById('pName').focus(), 50);
+};
+document.getElementById('projCancel').onclick =
+document.getElementById('projClose').onclick = () =>
+  document.getElementById('projectOverlay').classList.remove('show');
+document.getElementById('projSave').onclick = () => {
+  const name = document.getElementById('pName').value.trim();
+  if (!name) { toast('请输入项目名称'); return; }
+  if (!manualProjects.includes(name)) manualProjects.push(name);
+  localStorage.setItem('mail_kanban_manual_projects', JSON.stringify(manualProjects));
+  document.getElementById('projectOverlay').classList.remove('show');
+  refreshBoard();
+  toast('已添加项目列：' + esc(name) + '<br><span style="font-size:11px;opacity:.8;">（归档邮件时选它就会生效）</span>', 3000);
+};
+
+/* =====================================================================
+   重建索引
+   ===================================================================== */
+document.getElementById('rebuildBtn').onclick = async () => {
+  if (!dirHandle) { toast('请先选择保存文件夹'); return; }
+  const perm = await dirHandle.queryPermission({ mode: 'readwrite' });
+  if (perm !== 'granted') {
+    const req = await dirHandle.requestPermission({ mode: 'readwrite' });
+    if (req !== 'granted') { toast('未授予权限'); return; }
+  }
+  if (!confirm('重建索引会扫描文件夹内所有 HTML 归档并重建看板。\n\n确定继续？')) return;
+
+  showLoading('扫描文件夹中…');
+  try {
+    const files = await listHtmlFiles();
+    const newRecords = [];
+    let ok = 0, fail = 0;
+
+    for (let i = 0; i < files.length; i++) {
+      document.getElementById('loadingText').textContent = `扫描 ${i + 1}/${files.length}`;
+      const { entry, path } = files[i];
+      try {
+        const f = await entry.getFile();
+        const text = await f.text();
+        const m = text.match(/<meta\s+name=["']mail-meta["']\s+content=["']([^"']*)["']/i);
+        if (!m) { fail++; continue; }
+        let meta;
+        try {
+          meta = JSON.parse(m[1]
+            .replace(/&#39;/g, "'").replace(/&quot;/g, '"')
+            .replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>'));
+        } catch (e) { fail++; continue; }
+
+        const pathParts = path.split('/');
+        const fileName = pathParts.pop();
+        const folderPath = pathParts.join('/');
+
+        const attCount = (text.match(/class="att-item"/g) || []).length;
+
+        newRecords.push({
+          id: meta.id || fileName,
+          fileName,
+          folderPath,
+          subject: meta.subject || '',
+          from: meta.from || '',
+          fromName: meta.fromName || '',
+          fromEmail: meta.fromEmail || '',
+          to: meta.to || '',
+          date: meta.date || '',
+          dateISO: meta.dateISO || '',
+          project: meta.project || (folderPath.split('/')[0] || '未分类项目'),
+          topic: meta.topic || (folderPath.split('/')[1] || '未分类话题'),
+          createdAt: f.lastModified || Date.now(),
+          size: f.size,
+          attachmentCount: attCount,
+          unread: false
+        });
+        ok++;
+      } catch (e) { fail++; }
+    }
+
+    await idbClear('index');
+    for (const r of newRecords) await idbPut('index', r);
+    records = newRecords;
+    refreshBoard();
+    toast(`✅ 重建完成：成功 ${ok}，失败 ${fail}`, 3500);
+  } catch (e) {
+    console.error(e);
+    toast('❌ 重建失败：' + esc(e.message), 5000);
+  } finally {
+    hideLoading();
+  }
+};
+
+/* =====================================================================
+   键盘快捷键
+   ===================================================================== */
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') {
+    if (document.getElementById('previewOverlay').classList.contains('show')) {
+      document.getElementById('previewClose').click();
+    }
+    if (document.getElementById('projectOverlay').classList.contains('show')) {
+      document.getElementById('projectOverlay').classList.remove('show');
+    }
+  }
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+    e.preventDefault();
+    document.getElementById('qFrom').focus();
+  }
+});
+
+/* =====================================================================
+   启动
+   ===================================================================== */
+async function init() {
+  try {
+    await openDB();
+  } catch (e) {
+    alert('数据库初始化失败：' + e.message);
+    return;
+  }
+  try {
+    const mp = localStorage.getItem('mail_kanban_manual_projects');
+    if (mp) manualProjects = JSON.parse(mp) || [];
+  } catch (e) {}
+
+  records = await idbAll('index');
+  await restoreFolder();
+  refreshBoard();
+
+  if (!FS_SUPPORTED) {
+    toast('⚠️ 当前浏览器不支持写入本地文件夹<br>请使用 Chrome / Edge 桌面版打开', 8000);
+  } else if (!dirHandle) {
+    setTimeout(() => {
+      toast('💡 请先点击顶部「选择 OneDrive 文件夹」，之后拖入的邮件会自动存到那里', 5500);
+    }, 800);
+  }
+}
+
+init();
+</script>
+</body>
+</html>
